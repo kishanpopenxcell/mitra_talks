@@ -17,43 +17,28 @@ export function MicButton({ recordingState, disabled, onStart, onStop }: MicButt
       disabled={disabled || isProcessing}
       onClick={isRecording ? onStop : onStart}
       aria-pressed={isRecording}
-      aria-label={isRecording ? 'Stop recording' : 'Start voice recording'}
+      aria-label={isRecording ? 'Stop recording' : 'Record a voice message'}
       className={[
-        'relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full transition-all duration-200 sm:h-12 sm:w-12',
+        'relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-40',
         isRecording
           ? 'scale-105 bg-rose-500 text-white shadow-[0_0_0_8px_rgba(244,63,94,0.15)]'
-          : 'bg-white/10 text-white hover:bg-white/20',
+          : 'text-muted hover:bg-white/[0.06] hover:text-fg',
       ].join(' ')}
     >
       {isRecording && (
         <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/40" aria-hidden="true" />
       )}
-      {isProcessing ? (
-        <SpinnerIcon />
-      ) : isRecording ? (
-        <StopIcon />
-      ) : (
-        <MicIcon />
-      )}
+      {isProcessing ? <SpinnerIcon /> : isRecording ? <StopIcon /> : <MicIcon />}
     </button>
   );
 }
 
 function MicIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className="relative h-6 w-6" aria-hidden="true">
-      <path
-        d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M19 11a7 7 0 0 1-14 0M12 18v3"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+    <svg viewBox="0 0 24 24" fill="none" className="relative h-5 w-5" aria-hidden="true">
+      <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

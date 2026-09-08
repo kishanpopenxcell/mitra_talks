@@ -1,7 +1,7 @@
 import { API_BASE_URL } from './config';
 import { ApiError } from './apiError';
 import { toBackendMood } from '../mood/moods';
-import type { ChatMessage, MoodId } from '../types';
+import { isReaction, type ChatMessage, type MoodId, type Reaction } from '../types';
 
 /** Extracts a human-readable message from a JSON error body, falling back to the raw text. */
 function extractErrorDetail(rawText: string, fallback: string): string {
@@ -38,7 +38,23 @@ function extractChunkDelta(rawData: string): string | null {
   return null;
 }
 
+/** Extracts a known reaction name from a `reaction` event payload (`{"reaction": "..."}`). */
+function extractReaction(rawData: string): Reaction | null {
+  try {
+    const parsed: unknown = JSON.parse(rawData);
+    if (parsed !== null && typeof parsed === 'object' && 'reaction' in parsed) {
+      const value = (parsed as { reaction: unknown }).reaction;
+      return isReaction(value) ? value : null;
+    }
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
+
 export interface ChatStreamCallbacks {
+  /** Called once, before any text, if the model chose a facial reaction for this reply. */
+  onReaction?: (reaction: Reaction) => void;
   /** Called for every incremental text chunk as it arrives. */
   onChunk: (textDelta: string) => void;
   /** Called once the stream has completed successfully. */
@@ -136,6 +152,9 @@ export async function streamChatResponse(
         } else if (event === 'error') {
           finished = true;
           callbacks.onError(extractErrorDetail(data, 'The AI companion ran into a problem. Please try again.'));
+        } else if (event === 'reaction') {
+          const reaction = extractReaction(data);
+          if (reaction) callbacks.onReaction?.(reaction);
         } else if (data.length > 0) {
           const delta = extractChunkDelta(data);
           if (delta !== null) {

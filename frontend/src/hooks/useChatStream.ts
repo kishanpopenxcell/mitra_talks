@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { streamChatResponse } from '../services/chatService';
-import type { ChatMessage, MoodId, UIMessage } from '../types';
+import type { ChatMessage, MoodId, ReactionEvent, UIMessage } from '../types';
 
 let idCounter = 0;
 function nextId(): string {
@@ -14,6 +14,8 @@ interface UseChatStreamResult {
   messages: UIMessage[];
   phase: ChatPhase;
   errorMessage: string | null;
+  /** The most recent facial reaction the model chose for its reply, if any. */
+  reaction: ReactionEvent | null;
   /** Send a new user message and stream the assistant's reply. */
   sendMessage: (text: string, mood: MoodId) => Promise<void>;
   /** Cancel an in-flight streaming response. */
@@ -28,6 +30,7 @@ export function useChatStream(): UseChatStreamResult {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [phase, setPhase] = useState<ChatPhase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reaction, setReaction] = useState<ReactionEvent | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const cancelStreaming = useCallback(() => {
@@ -76,6 +79,9 @@ export function useChatStream(): UseChatStreamResult {
       mood,
       historyForRequest,
       {
+        onReaction: (kind) => {
+          setReaction({ kind, at: Date.now() });
+        },
         onChunk: (delta) => {
           if (!receivedAny) {
             receivedAny = true;
@@ -125,5 +131,5 @@ export function useChatStream(): UseChatStreamResult {
     setPhase('done');
   }, []);
 
-  return { messages, phase, errorMessage, sendMessage, cancelStreaming, appendCompletedTurn };
+  return { messages, phase, errorMessage, reaction, sendMessage, cancelStreaming, appendCompletedTurn };
 }

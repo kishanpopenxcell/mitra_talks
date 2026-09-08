@@ -1,0 +1,245 @@
+/*
+ * Mitra: eyes and a mouth floating in a mood-coloured glow.
+ * Geometry is painted by MitraFace.tsx; this file owns the glow, the head
+ * motion per state, and the listening / thinking / error indicators.
+ */
+
+.mitra {
+  position: relative;
+  display: block;
+  width: var(--size, 160px);
+  height: var(--size, 160px);
+  flex: none;
+  --p: #7fd0a0;
+  --s2: #5fb98a;
+  --glow: rgba(127, 208, 160, 0.5);
+}
+
+.mitra-aura,
+.mitra-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.mitra-aura {
+  inset: -22%;
+  background: radial-gradient(circle, var(--glow) 0%, transparent 66%);
+  filter: blur(calc(var(--size, 160px) * 0.09));
+  opacity: 0.75;
+  animation: mitra-aura 4.2s ease-in-out infinite;
+}
+
+.mitra-glow {
+  inset: 7%;
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--p) 72%, #fff 28%) 0%,
+    var(--p) 36%,
+    color-mix(in srgb, var(--s2) 55%, transparent) 62%,
+    transparent 80%
+  );
+  filter: blur(calc(var(--size, 160px) * 0.04));
+  animation: mitra-breathe 4.2s ease-in-out infinite;
+}
+
+.mitra svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mitra-fg {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mitra-breathe 4.2s ease-in-out infinite;
+}
+
+/* ---------- indicators ---------- */
+
+.mitra-rings,
+.mitra-dots,
+.mitra-halo {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+}
+
+.mitra-rings {
+  inset: -10%;
+}
+.mitra-rings span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--p);
+  opacity: 0;
+  animation: mitra-ring 2.4s ease-out infinite;
+}
+.mitra-rings span:nth-child(2) {
+  animation-delay: 0.8s;
+}
+.mitra-rings span:nth-child(3) {
+  animation-delay: 1.6s;
+}
+
+.mitra-dots {
+  right: -12%;
+  top: 2%;
+  gap: calc(var(--size, 160px) * 0.05);
+}
+.mitra-dots span {
+  width: calc(var(--size, 160px) * 0.085);
+  height: calc(var(--size, 160px) * 0.085);
+  border-radius: 50%;
+  background: var(--p);
+  animation: mitra-dot 1.2s ease-in-out infinite;
+}
+.mitra-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.mitra-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.mitra-halo {
+  inset: -4%;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(220, 170, 170, 0.55);
+}
+
+/* ---------- states ---------- */
+
+.mitra[data-state='listening'] .mitra-rings {
+  display: block;
+}
+.mitra[data-state='listening'] .mitra-fg {
+  animation: mitra-lean 2.8s ease-in-out infinite;
+}
+.mitra[data-state='listening'] .mitra-glow {
+  animation: mitra-glow-pulse 1.6s ease-in-out infinite;
+}
+
+.mitra[data-state='thinking'] .mitra-dots {
+  display: flex;
+}
+.mitra[data-state='thinking'] .mitra-fg {
+  animation: mitra-tilt 3s ease-in-out infinite;
+}
+
+.mitra[data-state='speaking'] .mitra-fg {
+  animation: mitra-bob 1.1s ease-in-out infinite;
+}
+.mitra[data-state='speaking'] .mitra-glow {
+  animation: mitra-glow-pulse 1.1s ease-in-out infinite;
+}
+
+.mitra[data-state='error'] .mitra-halo {
+  display: block;
+}
+.mitra[data-state='error'] .mitra-glow,
+.mitra[data-state='error'] .mitra-aura {
+  filter: saturate(0.3) brightness(0.8) blur(calc(var(--size, 160px) * 0.04));
+  animation: none;
+}
+.mitra[data-state='error'] .mitra-fg {
+  animation: none;
+}
+
+/* Small avatars: no indicators, they'd overwhelm the face. */
+.mitra[data-mini] .mitra-rings,
+.mitra[data-mini] .mitra-dots,
+.mitra[data-mini] .mitra-halo {
+  display: none;
+}
+
+/* ---------- keyframes ---------- */
+
+@keyframes mitra-breathe {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    transform: scale(1.02) translateY(-1.5%);
+  }
+}
+@keyframes mitra-aura {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.06);
+  }
+}
+@keyframes mitra-glow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+@keyframes mitra-lean {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(-1%);
+  }
+  50% {
+    transform: rotate(-1deg) translateY(-2.5%);
+  }
+}
+@keyframes mitra-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+@keyframes mitra-tilt {
+  0%,
+  100% {
+    transform: rotate(4deg);
+  }
+  50% {
+    transform: rotate(6deg) translateY(-1%);
+  }
+}
+@keyframes mitra-dot {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-40%);
+    opacity: 1;
+  }
+}
+@keyframes mitra-bob {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mitra * {
+    animation: none !important;
+  }
+  .mitra-rings span {
+    opacity: 0.35;
+  }
+}

@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { Orb } from '../Orb';
+import { MitraFace } from '../Mitra';
 import { InputBar } from '../InputBar';
 import { getMoodMeta } from '../../mood/moods';
-import type { OrbState, MoodId } from '../../types';
+import type { MitraState, MoodId, ReactionEvent } from '../../types';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { converseWithVoice } from '../../services/voiceService';
@@ -18,7 +18,7 @@ interface ConversationScreenProps {
 
 export function ConversationScreen({ mood, onChangeMood }: ConversationScreenProps) {
   const moodMeta = getMoodMeta(mood);
-  const { messages, phase, errorMessage, sendMessage, cancelStreaming, appendCompletedTurn } =
+  const { messages, phase, errorMessage, reaction: chatReaction, sendMessage, cancelStreaming, appendCompletedTurn } =
     useChatStream();
   const {
     recordingState,
@@ -31,19 +31,28 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
   } = useVoiceRecorder();
 
   const [voiceTurnError, setVoiceTurnError] = useState<string | null>(null);
+  const [voiceReaction, setVoiceReaction] = useState<ReactionEvent | null>(null);
   const [voiceModeActive, setVoiceModeActive] = useState(false);
 
   const isStreaming = phase === 'sending' || phase === 'streaming';
   const isRecording = recordingState === 'recording';
   const isProcessingVoice = recordingState === 'processing';
 
-  const orbState: OrbState = (() => {
+  const faceState: MitraState = (() => {
     if (recorderError || errorMessage || voiceTurnError) return 'error';
     if (isRecording) return 'listening';
     if (isProcessingVoice || phase === 'sending') return 'thinking';
     if (phase === 'streaming') return 'speaking';
     return 'idle';
   })();
+
+  // Whichever reaction fired most recently wins (text stream or voice turn).
+  const reaction =
+    chatReaction && voiceReaction
+      ? chatReaction.at >= voiceReaction.at
+        ? chatReaction
+        : voiceReaction
+      : chatReaction ?? voiceReaction;
 
   const handleSendText = useCallback(
     (text: string) => {
@@ -72,6 +81,7 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
 
       const result = await converseWithVoice(blob, mood, history);
       // Text mode is silent by design -- voice replies only happen in Voice Mode.
+      if (result.reaction) setVoiceReaction({ kind: result.reaction, at: Date.now() });
       appendCompletedTurn(result.transcript, result.reply_text);
     } catch (err) {
       setVoiceTurnError(toFriendlyError(err, 'The voice conversation could not be completed.'));
@@ -107,48 +117,47 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
-        <MoodIndicator mood={moodMeta} onChangeMood={onChangeMood} />
+    <div className="animate-screen-in flex h-dvh flex-col">
+      <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-5">
+        <div className="flex items-center gap-3.5">
+          <MitraFace mood={mood} state={faceState} reaction={reaction} size={44} />
+          <div className="flex flex-col gap-0.5">
+            <span className="font-display text-lg font-bold leading-none tracking-[-0.01em]">Mitra</span>
+            <MoodIndicator mood={moodMeta} onChangeMood={onChangeMood} />
+          </div>
+        </div>
+
         {micSupported && (
           <button
             type="button"
             onClick={() => setVoiceModeActive(true)}
-            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-xs text-white/80 transition hover:bg-white/[0.08] sm:text-sm"
+            className="flex h-11 items-center gap-2.5 rounded-full border px-4 text-sm font-medium text-fg transition hover:bg-white/[0.06]"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--mood-p) 32%, transparent)',
+              background: 'color-mix(in srgb, var(--mood-p) 8%, transparent)',
+            }}
           >
-            <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-              <path
-                d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M19 11a7 7 0 0 1-14 0M12 18v3"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
+            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+              <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
-            Voice Mode
+            <span>Voice mode</span>
           </button>
         )}
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-4 pb-2">
-        <Orb state={orbState} mood={moodMeta} size="md" />
-        {combinedError && (
-          <p className="mt-3 max-w-sm text-center text-xs text-rose-300/80 sm:text-sm">
-            {combinedError}
-          </p>
-        )}
-        {!combinedError && !micSupported && (
-          <p className="mt-3 max-w-sm text-center text-xs text-white/40">
-            Voice input isn&apos;t supported in this browser — you can still type to chat.
-          </p>
-        )}
-      </div>
-
       <MessageList messages={messages} mood={moodMeta} />
+
+      {combinedError && (
+        <p className="animate-fade-in mx-auto w-full max-w-[760px] px-6 pb-1 text-center text-xs text-rose-300/80 sm:text-sm">
+          {combinedError}
+        </p>
+      )}
+      {!combinedError && !micSupported && (
+        <p className="mx-auto w-full max-w-[760px] px-6 pb-1 text-center text-xs text-muted">
+          Voice input isn&apos;t supported in this browser — you can still type to chat.
+        </p>
+      )}
 
       <InputBar
         onSendText={handleSendText}

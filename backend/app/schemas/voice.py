@@ -58,3 +58,10 @@ class ConverseResponse(BaseModel):
     tts_available: bool = Field(
         description="Whether audio_base64 contains usable synthesized speech."
     )
+    reaction: str | None = Field(
+        default=None,
+        description=(
+            "The facial reaction the companion chose for this reply "
+            "(surprised, confused, wink, delighted, sheepish), or null for none."
+        ),
+    )

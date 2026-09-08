@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Orb } from '../Orb';
+import { MitraFace } from '../Mitra';
 import { getMoodMeta } from '../../mood/moods';
 import { getVoiceModeGreeting } from '../../mood/greetings';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { converseWithVoice, base64AudioToObjectUrl } from '../../services/voiceService';
 import { toFriendlyError } from '../../services/apiError';
-import { MessageList } from './MessageList';
-import type { ChatMessage, MoodId, OrbState, UIMessage } from '../../types';
+import { Waveform } from './Waveform';
+import type { ChatMessage, MitraState, MoodId, ReactionEvent } from '../../types';
 
 interface VoiceModeScreenProps {
   mood: MoodId;
@@ -21,30 +22,31 @@ interface VoiceModeScreenProps {
 
 type VoiceLoopPhase = 'greeting' | 'listening' | 'paused' | 'processing' | 'speaking' | 'error';
 
-let idCounter = 0;
-function nextId(): string {
-  idCounter += 1;
-  return `voice-${Date.now()}-${idCounter}`;
+interface Caption {
+  user: string | null;
+  assistant: string | null;
+  turn: number;
 }
 
 /**
  * Hands-free voice conversation loop: Mitra greets, then the mic auto-starts,
  * auto-stops on sustained silence (voice activity detection), sends audio to
  * the backend's combined STT->LLM->TTS pipeline, speaks the reply, and
- * automatically starts listening again -- no mic button needed. Tapping the
- * orb is the one manual control: it interrupts Mitra mid-reply (barge-in) or
+ * automatically starts listening again -- no mic button needed. Tapping Mitra
+ * is the one manual control: it interrupts mid-reply (barge-in) or
  * pauses/resumes listening.
  */
 export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit }: VoiceModeScreenProps) {
   const moodMeta = getMoodMeta(mood);
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [phase, setPhase] = useState<VoiceLoopPhase>('greeting');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [localMessages, setLocalMessages] = useState<UIMessage[]>([]);
+  const [caption, setCaption] = useState<Caption>({ user: null, assistant: null, turn: 0 });
+  const [reaction, setReaction] = useState<ReactionEvent | null>(null);
   const historyRef = useRef<ChatMessage[]>(initialHistory);
   const activeRef = useRef(true);
 
-  const { recordingState, isSupported: micSupported, startRecording, stopRecording, cancelRecording } =
-    useVoiceRecorder();
+  const { isSupported: micSupported, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
 
   const handlePlaybackEnded = useCallback(() => {
     if (!activeRef.current) return;
@@ -52,14 +54,15 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { playbackState, playAudioUrl, speakText, stop: stopPlayback } = useAudioPlayback(handlePlaybackEnded);
+  const { playAudioUrl, speakText, stop: stopPlayback, usedFallback, outputAmplitude } =
+    useAudioPlayback(handlePlaybackEnded);
 
   const handleSilence = useCallback(() => {
     void finishListening();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { amplitude, attach: attachVAD, detach: detachVAD } = useVoiceActivityDetection({
+  const { amplitude: micAmplitude, attach: attachVAD, detach: detachVAD } = useVoiceActivityDetection({
     onSilence: handleSilence,
   });
 
@@ -105,14 +108,8 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       ];
       historyRef.current = [...historyRef.current, ...newTurns].slice(-20);
 
-      const userMsg: UIMessage = { id: nextId(), role: 'user', content: result.transcript, createdAt: Date.now() };
-      const assistantMsg: UIMessage = {
-        id: nextId(),
-        role: 'assistant',
-        content: result.reply_text,
-        createdAt: Date.now(),
-      };
-      setLocalMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setCaption((prev) => ({ user: result.transcript, assistant: result.reply_text, turn: prev.turn + 1 }));
+      if (result.reaction) setReaction({ kind: result.reaction, at: Date.now() });
       onTurnCompleted(result.transcript, result.reply_text);
 
       setPhase('speaking');
@@ -137,7 +134,9 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       return;
     }
     setPhase('greeting');
-    void speakText(getVoiceModeGreeting(mood));
+    const greeting = getVoiceModeGreeting(mood);
+    setCaption({ user: null, assistant: greeting, turn: 0 });
+    void speakText(greeting);
 
     return () => {
       activeRef.current = false;
@@ -148,7 +147,7 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleOrbTap = useCallback(() => {
+  const handleTap = useCallback(() => {
     if (phase === 'speaking' || phase === 'greeting') {
       // Barge-in: stop Mitra talking and start listening immediately.
       stopPlayback();
@@ -157,14 +156,12 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       detachVAD();
       cancelRecording();
       setPhase('paused');
-    } else if (phase === 'paused') {
-      void beginListening();
-    } else if (phase === 'error') {
+    } else if (phase === 'paused' || phase === 'error') {
       void beginListening();
     }
   }, [phase, stopPlayback, beginListening, detachVAD, cancelRecording]);
 
-  const orbState: OrbState = (() => {
+  const faceState: MitraState = (() => {
     if (phase === 'error') return 'error';
     if (phase === 'listening') return 'listening';
     if (phase === 'processing') return 'thinking';
@@ -172,67 +169,107 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
     return 'idle'; // paused
   })();
 
-  const statusLabel: string = (() => {
+  const isSpeaking = phase === 'speaking' || phase === 'greeting';
+  // Real level from Mitra's audio when we have it; the browser speech fallback
+  // exposes none, so leave it undefined and let the face synthesise a rhythm.
+  const faceAmplitude = isSpeaking && !usedFallback ? outputAmplitude : undefined;
+  const waveAmplitude = phase === 'listening' ? micAmplitude : isSpeaking ? outputAmplitude : 0;
+
+  const [statusLabel, hint] = ((): [string, string] => {
     switch (phase) {
       case 'greeting':
-        return 'Mitra is saying hello…';
+        return ['Saying hello…', 'Tap Mitra to skip ahead'];
       case 'listening':
-        return "I'm listening — go ahead and speak.";
+        return ["I'm listening — take your time.", 'Tap Mitra to pause'];
       case 'paused':
-        return 'Listening paused — tap the orb to resume.';
+        return ['Paused.', 'Tap Mitra to resume'];
       case 'processing':
-        return 'Thinking…';
+        return ['Thinking…', ''];
       case 'speaking':
-        return 'Mitra is speaking — tap the orb to interrupt.';
+        return ['', 'Tap Mitra to interrupt'];
       case 'error':
-        return errorMessage ?? 'Something went wrong.';
+        return [errorMessage ?? 'Something went wrong.', 'Tap Mitra to try again'];
       default:
-        return '';
+        return ['', ''];
     }
   })();
 
-  void recordingState;
-  void playbackState;
+  const tapLabel = isSpeaking ? 'Interrupt Mitra' : phase === 'listening' ? 'Pause listening' : 'Resume listening';
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
-        <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70 sm:text-sm">
-          <span aria-hidden="true">{moodMeta.emoji}</span>
-          <span>Voice Mode</span>
+    <div className="animate-screen-in relative flex h-dvh flex-col">
+      <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-5">
+        <span
+          className="flex h-10 items-center gap-2.5 rounded-full border px-4 text-sm"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--mood-p) 28%, transparent)',
+            background: 'color-mix(in srgb, var(--mood-p) 8%, transparent)',
+          }}
+        >
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ background: moodMeta.colors.primary, boxShadow: `0 0 12px ${moodMeta.colors.glow}` }}
+            aria-hidden="true"
+          />
+          <span className="font-medium">Voice mode</span>
+          <span className="opacity-50" aria-hidden="true">
+            ·
+          </span>
+          <span className="text-muted">{moodMeta.label}</span>
         </span>
         <button
           type="button"
           onClick={onExit}
-          className="rounded-full border border-white/15 px-3.5 py-1.5 text-xs text-white/80 transition hover:bg-white/10 sm:text-sm"
+          className="flex h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-sm font-medium text-fg transition hover:bg-white/10"
         >
-          Exit Voice Mode
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span>Exit</span>
         </button>
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-2">
+      <div className="flex flex-1 flex-col items-center justify-center gap-7 px-4">
         <button
           type="button"
-          onClick={handleOrbTap}
-          aria-label={
-            phase === 'speaking' || phase === 'greeting'
-              ? 'Interrupt Mitra'
-              : phase === 'listening'
-                ? 'Pause listening'
-                : 'Resume listening'
-          }
-          className="rounded-full transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          onClick={handleTap}
+          aria-label={tapLabel}
+          className="rounded-full transition-transform duration-200 hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
-          <Orb state={orbState} mood={moodMeta} amplitude={amplitude} size="lg" />
+          <MitraFace
+            mood={mood}
+            state={faceState}
+            amplitude={faceAmplitude}
+            reaction={reaction}
+            size={isDesktop ? 340 : 250}
+            gazeFollow={phase !== 'listening'}
+            label={`Mitra, ${faceState}`}
+          />
         </button>
-        <p className="max-w-sm text-center text-xs text-white/50 sm:text-sm">{statusLabel}</p>
+
+        <Waveform amplitude={waveAmplitude} />
+
+        <div className="flex min-h-[64px] flex-col items-center gap-2 px-6 text-center">
+          {statusLabel && (
+            <p
+              key={statusLabel}
+              className="animate-fade-in font-display text-balance text-xl font-semibold tracking-[-0.02em] sm:text-[28px]"
+            >
+              {statusLabel}
+            </p>
+          )}
+          {hint && <p className="text-sm text-muted">{hint}</p>}
+        </div>
       </div>
 
-      <MessageList
-        messages={localMessages}
-        mood={moodMeta}
-        emptyStateText="Your conversation will appear here as you talk."
-      />
+      <div className="px-6 pb-10 sm:pb-14" aria-live="polite">
+        <div key={caption.turn} className="animate-fade-in mx-auto flex w-full max-w-[760px] flex-col gap-3 text-center">
+          {caption.user && <p className="text-[15px] leading-relaxed text-muted">{caption.user}</p>}
+          {caption.assistant && (
+            <p className="text-pretty text-lg leading-relaxed text-fg sm:text-xl">{caption.assistant}</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

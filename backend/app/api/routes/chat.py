@@ -23,13 +23,17 @@ async def _sse_event_stream(
 ) -> AsyncIterator[dict[str, str]]:
     """Build the SSE event sequence for a chat stream.
 
-    Emits one `message` event per text delta, then a final `done` event on
-    success, or an `error` event (with a clean human-readable message) if
-    something fails mid-stream. Never emits a raw stack trace.
+    Emits an optional `reaction` event first, then one `message` event per
+    text delta, then a final `done` event on success, or an `error` event
+    (with a clean human-readable message) if something fails mid-stream.
+    Never emits a raw stack trace.
     """
     try:
-        async for delta in llm_service.stream_reply(request.mood, request.messages):
-            yield {"event": "message", "data": json.dumps({"delta": delta})}
+        async for event in llm_service.stream_reply(request.mood, request.messages):
+            if event.kind == "reaction":
+                yield {"event": "reaction", "data": json.dumps({"reaction": event.value})}
+            else:
+                yield {"event": "message", "data": json.dumps({"delta": event.value})}
         yield {"event": "done", "data": json.dumps({"done": True})}
     except AppError as exc:
         logger.warning("Chat stream failed with AppError: %s", exc.detail)
@@ -52,6 +56,9 @@ async def _sse_event_stream(
         "first, ending with the latest user message) and streams the AI "
         "companion's reply as Server-Sent Events.\n\n"
         "Event types:\n"
+        "- `reaction`: `{\"reaction\": str}` -- sent at most once, before any "
+        "text, naming the facial reaction the companion chose for this reply "
+        "(surprised, confused, wink, delighted, sheepish). Omitted when none.\n"
         "- `message`: `{\"delta\": str}` -- an incremental text chunk.\n"
         "- `done`: `{\"done\": true}` -- sent once when the reply is complete.\n"
         "- `error`: `{\"detail\": str}` -- sent if generation fails; the "

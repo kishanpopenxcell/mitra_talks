@@ -5,24 +5,25 @@ interface MoodIndicatorProps {
   onChangeMood: () => void;
 }
 
+/** Compact "current mood · Change" control shown under Mitra's name in the header. */
 export function MoodIndicator({ mood, onChangeMood }: MoodIndicatorProps) {
   return (
     <button
       type="button"
       onClick={onChangeMood}
       title="Change mood"
-      className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/80 backdrop-blur-xl transition hover:bg-white/[0.08] sm:text-sm"
+      className="group flex items-center gap-2 text-[13px] text-muted transition hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded-full"
     >
       <span
-        className="flex h-5 w-5 items-center justify-center rounded-full text-[11px]"
-        style={{
-          background: `radial-gradient(circle at 35% 30%, ${mood.colors.primary}, ${mood.colors.secondary})`,
-        }}
+        className="h-2 w-2 rounded-full"
+        style={{ background: mood.colors.primary, boxShadow: `0 0 12px ${mood.colors.glow}` }}
         aria-hidden="true"
-      >
-        {mood.emoji}
-      </span>
+      />
       <span className="font-medium">{mood.label}</span>
+      <span className="opacity-50" aria-hidden="true">
+        ·
+      </span>
+      <span className="underline-offset-2 group-hover:underline">Change</span>
     </button>
   );
 }

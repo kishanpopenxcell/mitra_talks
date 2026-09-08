@@ -125,20 +125,24 @@ async def converse(
         )
 
     full_history = [*history_messages, ChatMessage(role="user", content=transcript)]
-    reply_text = await llm_service.generate_reply(mood_value, full_history)
+    reply = await llm_service.generate_reply(mood_value, full_history)
 
     audio_base64: str | None = None
     tts_available = True
-    try:
-        reply_audio = await tts_service.synthesize(reply_text)
-        audio_base64 = audio_bytes_to_base64(reply_audio)
-    except TTSError as exc:
-        logger.warning("TTS failed during /converse, continuing without audio: %s", exc.detail)
+    if reply.text:
+        try:
+            reply_audio = await tts_service.synthesize(reply.text)
+            audio_base64 = audio_bytes_to_base64(reply_audio)
+        except TTSError as exc:
+            logger.warning("TTS failed during /converse, continuing without audio: %s", exc.detail)
+            tts_available = False
+    else:
         tts_available = False
 
     return ConverseResponse(
         transcript=transcript,
-        reply_text=reply_text,
+        reply_text=reply.text,
         audio_base64=audio_base64,
         tts_available=tts_available,
+        reaction=reply.reaction,
     )

@@ -1,19 +1,47 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans:
-    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Figtree', ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #0f0d17;
+  --color-fg: #f3eff9;
+  --color-muted: #a49db8;
+  --color-ink: #161221;
+}
+
+/*
+ * Mood theme. The three variables are set on the app root (see moodStyle()
+ * in mood/moods.ts) and every mood-aware surface reads them, so changing the
+ * mood recolours the whole scene. Registering them lets the browser animate
+ * the colour change instead of snapping.
+ */
+@property --mood-p {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #7fd0a0;
+}
+@property --mood-s2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #5fb98a;
+}
+@property --mood-glow {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(127, 208, 160, 0.45);
 }
 
 @layer base {
   html,
   body {
     height: 100%;
-    background-color: #0b0b14;
+    background-color: #0f0d17;
   }
 
   body {
     font-family: var(--font-sans);
+    color: #f3eff9;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -23,7 +51,7 @@
   }
 
   ::selection {
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--mood-p) 45%, transparent);
   }
 
   textarea {
@@ -32,14 +60,6 @@
 }
 
 @layer utilities {
-  .bg-app-gradient {
-    background:
-      radial-gradient(circle at 20% -10%, rgba(120, 110, 200, 0.18), transparent 45%),
-      radial-gradient(circle at 90% 10%, rgba(90, 160, 190, 0.12), transparent 40%),
-      radial-gradient(circle at 50% 120%, rgba(140, 90, 160, 0.15), transparent 55%),
-      linear-gradient(180deg, #0b0b14 0%, #0a0a12 100%);
-  }
-
   .bg-noise {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
@@ -47,9 +67,118 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
 }
 
-/* Custom scrollbar, kept subtle to match the glassy dark theme */
+/* ---------- Mood-reactive backdrop ---------- */
+
+.mood-vars {
+  transition:
+    --mood-p 0.7s ease,
+    --mood-s2 0.7s ease,
+    --mood-glow 0.7s ease;
+}
+
+.mood-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mood-backdrop::before,
+.mood-backdrop::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--mood-glow) 0%, transparent 62%);
+}
+
+.mood-backdrop::before {
+  width: 76vmax;
+  height: 76vmax;
+  left: 50%;
+  top: -30vmax;
+  opacity: 0.72;
+  animation: backdrop-drift 16s ease-in-out infinite alternate;
+}
+
+.mood-backdrop::after {
+  width: 48vmax;
+  height: 48vmax;
+  left: -18vmax;
+  bottom: -20vmax;
+  opacity: 0.32;
+  animation: backdrop-drift-2 20s ease-in-out infinite alternate;
+}
+
+@keyframes backdrop-drift {
+  from {
+    transform: translate(-32%, 0) scale(1);
+  }
+  to {
+    transform: translate(-22%, 5%) scale(1.06);
+  }
+}
+
+@keyframes backdrop-drift-2 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(8%, -6%) scale(1.08);
+  }
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+.animate-screen-in {
+  animation: screen-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Custom scrollbar, kept subtle */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
@@ -63,4 +192,17 @@
 *::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mood-vars {
+    transition: none;
+  }
+  .mood-backdrop::before,
+  .mood-backdrop::after,
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-screen-in {
+    animation: none;
+  }
 }

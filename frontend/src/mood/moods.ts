@@ -1,8 +1,9 @@
+import type { CSSProperties } from 'react';
 import type { MoodId } from '../types';
 
 /**
- * Frontend-side mood presentation metadata: display name, icon, and a tasteful
- * color tint used for the mood card, mood indicator, and orb tinting.
+ * Frontend-side mood presentation metadata: display name, blurb, and the
+ * colour trio that tints the whole scene (backdrop, accents, Mitra's glow).
  *
  * This is purely presentational. The backend owns the actual personality/system
  * prompt logic for each mood — this module never encodes behavioral instructions.
@@ -10,16 +11,14 @@ import type { MoodId } from '../types';
 export interface MoodMeta {
   id: MoodId;
   label: string;
-  emoji: string;
-  /** Short one-line description shown on the mood card. */
+  /** Short one-line description shown on the mood picker. */
   blurb: string;
-  /** Tailwind-friendly hex tones used for gradients / glows / accents. */
   colors: {
-    /** Primary accent color (used for borders, highlights, orb core). */
+    /** Primary accent colour (glow core, buttons, highlights). */
     primary: string;
-    /** Secondary color for gradients. */
+    /** Secondary colour for gradients. */
     secondary: string;
-    /** Soft glow color, usually a translucent version of primary. */
+    /** Soft translucent glow, used for ambient light. */
     glow: string;
   };
 }
@@ -28,58 +27,50 @@ export const MOODS: MoodMeta[] = [
   {
     id: 'happy',
     label: 'Happy',
-    emoji: '😊',
     blurb: 'Feeling good and want to share it',
-    colors: { primary: '#f6c453', secondary: '#f7924a', glow: 'rgba(246, 196, 83, 0.35)' },
+    colors: { primary: '#f6c453', secondary: '#f7924a', glow: 'rgba(246, 196, 83, 0.5)' },
   },
   {
     id: 'sad',
     label: 'Sad',
-    emoji: '💧',
     blurb: 'A little low, could use gentle company',
-    colors: { primary: '#6f9ceb', secondary: '#5577c9', glow: 'rgba(111, 156, 235, 0.35)' },
+    colors: { primary: '#6f9ceb', secondary: '#5577c9', glow: 'rgba(111, 156, 235, 0.5)' },
   },
   {
     id: 'angry',
     label: 'Angry',
-    emoji: '🔥',
     blurb: 'Frustrated and need to let it out',
-    colors: { primary: '#e0665c', secondary: '#c94f4f', glow: 'rgba(224, 102, 92, 0.35)' },
+    colors: { primary: '#e0665c', secondary: '#c94f4f', glow: 'rgba(224, 102, 92, 0.5)' },
   },
   {
     id: 'stressed',
     label: 'Stressed',
-    emoji: '🌪️',
     blurb: 'Overwhelmed and need to unwind',
-    colors: { primary: '#c98bd8', secondary: '#9a6fd0', glow: 'rgba(201, 139, 216, 0.35)' },
+    colors: { primary: '#c98bd8', secondary: '#9a6fd0', glow: 'rgba(201, 139, 216, 0.5)' },
   },
   {
     id: 'anxious',
     label: 'Anxious',
-    emoji: '🌊',
     blurb: 'On edge and need steadying',
-    colors: { primary: '#5fc7c0', secondary: '#3fa79f', glow: 'rgba(95, 199, 192, 0.35)' },
+    colors: { primary: '#5fc7c0', secondary: '#3fa79f', glow: 'rgba(95, 199, 192, 0.5)' },
   },
   {
     id: 'excited',
     label: 'Excited',
-    emoji: '✨',
     blurb: 'Buzzing with energy',
-    colors: { primary: '#f0598a', secondary: '#e2408a', glow: 'rgba(240, 89, 138, 0.35)' },
+    colors: { primary: '#f0598a', secondary: '#e2408a', glow: 'rgba(240, 89, 138, 0.55)' },
   },
   {
     id: 'lonely',
     label: 'Lonely',
-    emoji: '🌙',
     blurb: 'Wanting some company',
-    colors: { primary: '#8a8fd6', secondary: '#6a6fc2', glow: 'rgba(138, 143, 214, 0.35)' },
+    colors: { primary: '#8a8fd6', secondary: '#6a6fc2', glow: 'rgba(138, 143, 214, 0.45)' },
   },
   {
     id: 'neutral',
     label: 'Neutral',
-    emoji: '🌿',
     blurb: 'Just here, open to a chat',
-    colors: { primary: '#7fd0a0', secondary: '#5fb98a', glow: 'rgba(127, 208, 160, 0.35)' },
+    colors: { primary: '#7fd0a0', secondary: '#5fb98a', glow: 'rgba(127, 208, 160, 0.45)' },
   },
 ];
 
@@ -93,6 +84,19 @@ const MOOD_MAP: Record<MoodId, MoodMeta> = MOODS.reduce(
 
 export function getMoodMeta(id: MoodId): MoodMeta {
   return MOOD_MAP[id];
+}
+
+/**
+ * CSS custom properties that theme a subtree for a mood. Applied at the app
+ * root so the backdrop, buttons and bubbles all follow the selected mood, and
+ * animated between moods via `@property` transitions in index.css.
+ */
+export function moodStyle(meta: MoodMeta): CSSProperties {
+  return {
+    '--mood-p': meta.colors.primary,
+    '--mood-s2': meta.colors.secondary,
+    '--mood-glow': meta.colors.glow,
+  } as CSSProperties;
 }
 
 /**

@@ -32,8 +32,26 @@ export interface UIMessage extends ChatMessage {
   createdAt: number;
 }
 
-/** The orb's visual/behavioral state. */
-export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+/** Mitra's behavioural state. Drives the face rig's state overlay and head motion. */
+export type MitraState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+
+/**
+ * A short one-shot facial reaction, chosen by the model for each reply and
+ * layered over the current mood + state for about a second and a half.
+ */
+export type Reaction = 'surprised' | 'confused' | 'wink' | 'delighted' | 'sheepish';
+
+export const REACTIONS: readonly Reaction[] = ['surprised', 'confused', 'wink', 'delighted', 'sheepish'];
+
+export function isReaction(value: unknown): value is Reaction {
+  return typeof value === 'string' && (REACTIONS as readonly string[]).includes(value);
+}
+
+/** A reaction plus the moment it fired, so the same reaction can fire twice in a row. */
+export interface ReactionEvent {
+  kind: Reaction;
+  at: number;
+}
 
 /** Response shape of GET /health */
 export interface HealthResponse {
@@ -64,6 +82,7 @@ export interface ConverseResponse {
   reply_text: string;
   audio_base64: string | null;
   tts_available: boolean;
+  reaction: Reaction | null;
 }
 
 /** Recording lifecycle state for the microphone input. */

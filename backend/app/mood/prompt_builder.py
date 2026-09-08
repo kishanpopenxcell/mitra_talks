@@ -48,6 +48,25 @@ choice, and energy instead.
 """.strip()
 
 
+# Mitra's face reacts to each reply. The model picks the reaction because it is
+# the only component that actually understands the exchange; the backend strips
+# the tag before TTS/display and forwards it as structured data. Frontend ids
+# must stay in sync with `app.services.llm_service.REACTIONS`.
+REACTION_INSTRUCTIONS = """
+Your companion has an animated face. Begin EVERY reply with exactly one tag \
+saying what a warm friend's face would do on reading the user's message, \
+then a space, then your reply. Choose from:
+[react:none] - default; a natural, attentive expression
+[react:surprised] - genuinely unexpected news or a twist
+[react:confused] - you need clarification or the message is puzzling
+[react:wink] - a joke landed or you are being playfully conspiratorial
+[react:delighted] - good news, gratitude, or something that made you happy for them
+[react:sheepish] - you made a mistake, or they paid you a compliment
+Use [react:none] most of the time and the others only when they clearly fit. \
+The tag is machine-read and never shown or spoken, so never mention it.
+""".strip()
+
+
 def build_system_prompt(mood: Mood) -> str:
     """Construct the full system prompt for the given mood."""
     profile = get_mood_profile(mood)
@@ -71,4 +90,6 @@ Things to avoid:
 {avoid}
 """.strip()
 
-    return "\n\n".join([BASE_INSTRUCTIONS, mood_section, SAFETY_BOUNDARIES])
+    return "\n\n".join(
+        [BASE_INSTRUCTIONS, mood_section, REACTION_INSTRUCTIONS, SAFETY_BOUNDARIES]
+    )

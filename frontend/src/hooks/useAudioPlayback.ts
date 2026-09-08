@@ -13,6 +13,11 @@ interface UseAudioPlaybackResult {
   stop: () => void;
   /** Whether the last playback used the browser fallback rather than backend TTS. */
   usedFallback: boolean;
+  /**
+   * Live 0-1 RMS level of the audio currently playing, for driving Mitra's
+   * mouth. Always 0 for the browser speech fallback (it exposes no signal).
+   */
+  outputAmplitude: number;
 }
 
 /**
@@ -23,6 +28,7 @@ interface UseAudioPlaybackResult {
 export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('idle');
   const [usedFallback, setUsedFallback] = useState(false);
+  const [outputAmplitude, setOutputAmplitude] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const onEndedRef = useRef(onEnded);
@@ -37,6 +43,62 @@ export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
   const requestTokenRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Output analyser: routes the <audio> element through the Web Audio API so
+  // we can read its level each frame. Purely additive -- if anything here
+  // fails the element still plays on its own.
+  const analyserCtxRef = useRef<AudioContext | null>(null);
+  const analyserRafRef = useRef<number | null>(null);
+
+  const stopAnalyser = useCallback(() => {
+    if (analyserRafRef.current !== null) {
+      cancelAnimationFrame(analyserRafRef.current);
+      analyserRafRef.current = null;
+    }
+    const ctx = analyserCtxRef.current;
+    analyserCtxRef.current = null;
+    if (ctx && ctx.state !== 'closed') {
+      void ctx.close().catch(() => undefined);
+    }
+    setOutputAmplitude(0);
+  }, []);
+
+  const startAnalyser = useCallback(
+    (audio: HTMLAudioElement, token: number) => {
+      stopAnalyser();
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const source = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
+        analyserCtxRef.current = ctx;
+        void ctx.resume().catch(() => undefined);
+
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          if (requestTokenRef.current !== token || analyserCtxRef.current !== ctx) return;
+          analyser.getByteTimeDomainData(data);
+          let sumSquares = 0;
+          for (let i = 0; i < data.length; i++) {
+            const n = (data[i] - 128) / 128;
+            sumSquares += n * n;
+          }
+          setOutputAmplitude(Math.sqrt(sumSquares / data.length));
+          analyserRafRef.current = requestAnimationFrame(tick);
+        };
+        analyserRafRef.current = requestAnimationFrame(tick);
+      } catch {
+        /* the element keeps playing without a level readout */
+      }
+    },
+    [stopAnalyser],
+  );
+
   const revokeCurrentUrl = useCallback(() => {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -49,6 +111,7 @@ export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
       requestTokenRef.current += 1;
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
+      stopAnalyser();
       if (audioRef.current) {
         audioRef.current.onended = null;
         audioRef.current.onerror = null;
@@ -63,7 +126,7 @@ export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
       setPlaybackState('idle');
       if (notify) onEndedRef.current?.();
     },
-    [revokeCurrentUrl],
+    [revokeCurrentUrl, stopAnalyser],
   );
 
   const playAudioUrl = useCallback(
@@ -94,24 +157,28 @@ export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
       };
       audio.onended = () => {
         if (requestTokenRef.current !== token) return;
+        stopAnalyser();
         setPlaybackState('idle');
         revokeCurrentUrl();
         onEndedRef.current?.();
       };
       audio.onerror = () => {
         if (requestTokenRef.current !== token) return;
+        stopAnalyser();
         setPlaybackState('error');
         revokeCurrentUrl();
         onEndedRef.current?.();
       };
 
+      startAnalyser(audio, token);
       audio.play().catch(() => {
         if (requestTokenRef.current !== token) return;
+        stopAnalyser();
         setPlaybackState('error');
         onEndedRef.current?.();
       });
     },
-    [revokeCurrentUrl],
+    [revokeCurrentUrl, startAnalyser, stopAnalyser],
   );
 
   const speakWithBrowserFallback = useCallback((text: string, token: number) => {
@@ -184,5 +251,5 @@ export function useAudioPlayback(onEnded?: () => void): UseAudioPlaybackResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { playbackState, playAudioUrl, speakText, stop, usedFallback };
+  return { playbackState, playAudioUrl, speakText, stop, usedFallback, outputAmplitude };
 }

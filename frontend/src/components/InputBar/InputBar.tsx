@@ -43,60 +43,65 @@ export function InputBar({
   };
 
   return (
-    <div className="flex flex-col gap-2 border-t border-white/10 bg-black/20 px-3 py-3 backdrop-blur-2xl sm:px-6 sm:py-4">
-      {isBusy && (
-        <div className="flex items-center justify-between px-1 text-xs text-white/50">
-          <span>
-            {isRecording && 'Listening…'}
-            {recordingState === 'processing' && 'Processing your voice…'}
-            {isStreaming && !isRecording && 'Mitra is responding…'}
-          </span>
-          <button
-            type="button"
-            onClick={onCancelActive}
-            className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 transition hover:bg-white/10"
-          >
-            {isRecording ? 'Cancel' : 'Stop'}
-          </button>
-        </div>
-      )}
+    <div className="px-4 pb-5 pt-2 sm:px-10 sm:pb-7">
+      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2">
+        {isBusy && (
+          <div className="flex items-center justify-between px-4 text-xs text-muted">
+            <span>
+              {isRecording && 'Listening…'}
+              {recordingState === 'processing' && 'Working on what you said…'}
+              {isStreaming && !isRecording && 'Mitra is replying…'}
+            </span>
+            <button
+              type="button"
+              onClick={onCancelActive}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-fg/70 transition hover:bg-white/10"
+            >
+              {isRecording ? 'Cancel' : 'Stop'}
+            </button>
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 sm:gap-3">
-        <div className="flex flex-1 items-end rounded-2xl border border-white/10 bg-white/[0.05] px-3.5 py-2">
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-end gap-1.5 rounded-[32px] border border-white/[0.09] bg-white/[0.05] py-2 pl-5 pr-2 backdrop-blur-xl transition-colors focus-within:border-white/20"
+        >
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled || isRecording}
-            placeholder={isRecording ? 'Recording…' : 'Type how you’re feeling…'}
+            placeholder={isRecording ? 'Recording…' : 'Tell me more…'}
             rows={1}
-            className="max-h-32 w-full resize-none bg-transparent text-sm text-white placeholder:text-white/35 focus:outline-none sm:text-[15px]"
+            aria-label="Message Mitra"
+            className="max-h-32 min-h-[44px] w-full flex-1 resize-none bg-transparent py-2.5 text-[15px] text-fg placeholder:text-fg/40 focus:outline-none sm:text-base"
           />
-        </div>
 
-        {micSupported && (
-          <MicButton
-            recordingState={recordingState}
-            disabled={disabled || isStreaming}
-            onStart={onStartRecording}
-            onStop={onStopRecording}
-          />
-        )}
-
-        <button
-          type="submit"
-          disabled={disabled || !text.trim() || isRecording}
-          aria-label="Send message"
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 sm:h-12 sm:w-12"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 -rotate-45" aria-hidden="true">
-            <path
-              d="M4 12L20 4L13 20L11 13L4 12Z"
-              fill="currentColor"
+          {micSupported && (
+            <MicButton
+              recordingState={recordingState}
+              disabled={disabled || isStreaming}
+              onStart={onStartRecording}
+              onStop={onStopRecording}
             />
-          </svg>
-        </button>
-      </form>
+          )}
+
+          <button
+            type="submit"
+            disabled={disabled || !text.trim() || isRecording}
+            aria-label="Send message"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-ink transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+            style={{
+              background: 'linear-gradient(135deg, var(--mood-p), var(--mood-s2))',
+              boxShadow: '0 12px 30px -10px var(--mood-glow)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+              <path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

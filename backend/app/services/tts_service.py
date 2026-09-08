@@ -30,6 +30,8 @@ speech synthesis fails).
 
 from __future__ import annotations
 
+import struct
+
 import httpx
 
 from app.core.config import Settings
@@ -41,10 +43,60 @@ logger = get_logger(__name__)
 CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes"
 CARTESIA_API_VERSION = "2026-08-14"
 
+# Cartesia synthesizes as a stream, so the WAV header it returns carries the
+# 0xFFFFFFFF "unknown length" sentinel in both the RIFF chunk size and the
+# data chunk size instead of real byte counts. Tools that scan the stream
+# (ffmpeg) cope, but `new Audio(...)` in the browser trusts the header and
+# either refuses to play the clip or reports a ~13-hour duration -- which
+# surfaced as silent playback with `tts_available: true`. We rewrite the two
+# size fields with the real values before returning the bytes.
+WAV_UNKNOWN_SIZE = 0xFFFFFFFF
+WAV_MIN_HEADER_BYTES = 44
+
 # A reasonable default Cartesia voice if none is configured. Users should
 # still set CARTESIA_VOICE_ID explicitly for a voice they've chosen from
 # https://play.cartesia.ai/voices.
 DEFAULT_CARTESIA_VOICE_ID = "a0e99841-438c-4a64-b679-ae501e7d6091"
+
+
+def _fix_wav_header(data: bytes) -> bytes:
+    """Replace placeholder RIFF/data sizes with the real byte counts.
+
+    Returns `data` untouched if it isn't a RIFF/WAVE payload or has no `data`
+    chunk -- a non-WAV container (e.g. if the output format is switched to
+    mp3) must pass through unmodified.
+    """
+    if (
+        len(data) < WAV_MIN_HEADER_BYTES
+        or data[:4] != b"RIFF"
+        or data[8:12] != b"WAVE"
+    ):
+        return data
+
+    # Walk the chunk list rather than assuming `data` sits at a fixed offset --
+    # a LIST/fact chunk before it would shift the position.
+    offset = 12
+    data_offset: int | None = None
+    while offset + 8 <= len(data):
+        chunk_id = data[offset : offset + 4]
+        chunk_size = struct.unpack_from("<I", data, offset + 4)[0]
+        if chunk_id == b"data":
+            data_offset = offset
+            break
+        if chunk_size == WAV_UNKNOWN_SIZE:
+            # An unsized chunk before `data` means we can't keep walking.
+            break
+        # Chunks are word-aligned: an odd size is followed by a pad byte.
+        offset += 8 + chunk_size + (chunk_size % 2)
+
+    if data_offset is None:
+        logger.warning("TTS returned a WAV with no locatable data chunk; passing through")
+        return data
+
+    patched = bytearray(data)
+    struct.pack_into("<I", patched, 4, len(data) - 8)
+    struct.pack_into("<I", patched, data_offset + 4, len(data) - data_offset - 8)
+    return bytes(patched)
 
 
 class TTSService:
@@ -107,7 +159,7 @@ class TTSService:
                     CARTESIA_TTS_URL, headers=headers, json=body
                 )
             response.raise_for_status()
-            return response.content
+            return _fix_wav_header(response.content)
         except httpx.HTTPStatusError as exc:
             logger.exception("Cartesia TTS request failed")
             if exc.response.status_code == 401:

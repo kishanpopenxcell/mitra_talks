@@ -1,49 +1,49 @@
+import { MitraFace } from '../Mitra';
 import type { MoodMeta } from '../../mood/moods';
+import type { MoodId } from '../../types';
 
 interface MoodCardProps {
   mood: MoodMeta;
+  /** This mood is the committed choice. */
   selected: boolean;
-  onSelect: (id: MoodMeta['id']) => void;
+  /** This mood is currently previewed (hovered/focused, or selected with nothing hovered). */
+  active: boolean;
+  onSelect: (id: MoodId) => void;
+  onHover: (id: MoodId | null) => void;
 }
 
-export function MoodCard({ mood, selected, onSelect }: MoodCardProps) {
+/** One mood in the picker: a small Mitra wearing that mood's expression, plus its name. */
+export function MoodCard({ mood, selected, active, onSelect, onHover }: MoodCardProps) {
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
       onClick={() => onSelect(mood.id)}
-      aria-pressed={selected}
+      onMouseEnter={() => onHover(mood.id)}
+      onMouseLeave={() => onHover(null)}
+      onFocus={() => onHover(mood.id)}
+      onBlur={() => onHover(null)}
       className={[
-        'group relative flex flex-col items-center gap-2 rounded-2xl border px-4 py-5 text-center',
-        'backdrop-blur-xl transition-all duration-300 ease-out',
+        'group flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-1 transition-all duration-300 ease-out',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-        selected
-          ? 'border-white/40 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.15)] scale-[1.03]'
-          : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 hover:-translate-y-0.5',
+        active ? 'opacity-100' : 'opacity-70 saturate-[0.85] hover:opacity-100 hover:saturate-100',
       ].join(' ')}
-      style={{
-        boxShadow: selected ? `0 8px 30px -8px ${mood.colors.glow}` : undefined,
-      }}
     >
       <span
-        className="flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform duration-300 group-hover:scale-110"
-        style={{
-          background: `radial-gradient(circle at 35% 30%, ${mood.colors.primary}, ${mood.colors.secondary})`,
-          boxShadow: `0 0 22px ${mood.colors.glow}`,
-        }}
-        aria-hidden="true"
+        className={[
+          'block transition-transform duration-300 ease-out',
+          selected ? 'scale-115' : active ? 'scale-108' : 'group-hover:scale-105',
+        ].join(' ')}
       >
-        {mood.emoji}
+        <MitraFace mood={mood.id} size={64} label="" />
       </span>
-      <span className="text-sm font-medium tracking-wide text-white/90">{mood.label}</span>
-      <span className="text-[11px] leading-snug text-white/50">{mood.blurb}</span>
-      {selected && (
-        <span
-          className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-bold text-black shadow-lg"
-          aria-hidden="true"
-        >
-          ✓
-        </span>
-      )}
+      <span
+        className="text-[13px] font-medium tracking-wide transition-colors duration-300"
+        style={{ color: active ? mood.colors.primary : undefined }}
+      >
+        {mood.label}
+      </span>
     </button>
   );
 }

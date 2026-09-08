@@ -24,7 +24,10 @@ this request.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Literal
 
 from huggingface_hub.errors import HfHubHTTPError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -46,6 +49,51 @@ from app.utils.errors import (
 )
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Facial reactions
+#
+# The system prompt (app/mood/prompt_builder.py) asks the model to open every
+# reply with `[react:<name>]`. We strip that tag here -- it must never reach
+# TTS or the transcript -- and surface the name as structured data so the
+# frontend can animate Mitra's face. `none` and anything unrecognised map to
+# no reaction. Must stay in sync with the frontend's `Reaction` type.
+# ---------------------------------------------------------------------------
+
+REACTIONS: frozenset[str] = frozenset(
+    {"surprised", "confused", "wink", "delighted", "sheepish"}
+)
+
+_REACTION_TAG_RE = re.compile(r"^\s*\[\s*react\s*:\s*([a-zA-Z_]+)\s*\]\s*", re.IGNORECASE)
+
+# If the reply starts with "[" we hold text back until the tag closes, but never
+# more than this many characters -- past that it isn't a tag, flush it.
+_MAX_TAG_BUFFER = 40
+
+
+def split_reaction(text: str) -> tuple[str | None, str]:
+    """Split a leading `[react:x]` tag off `text`. Returns (reaction, remainder)."""
+    match = _REACTION_TAG_RE.match(text)
+    if not match:
+        return None, text
+    name = match.group(1).lower()
+    return (name if name in REACTIONS else None), text[match.end() :]
+
+
+@dataclass(frozen=True)
+class ReplyEvent:
+    """One item of a streamed reply: the reaction (at most once, first) or a text delta."""
+
+    kind: Literal["reaction", "delta"]
+    value: str
+
+
+@dataclass(frozen=True)
+class GeneratedReply:
+    """A complete non-streamed reply with its reaction tag already removed."""
+
+    text: str
+    reaction: str | None
 
 
 def _trim_history(
@@ -145,23 +193,61 @@ class LLMService:
 
     async def stream_reply(
         self, mood: Mood, history: list[ChatMessage]
-    ) -> AsyncIterator[str]:
-        """Yield text deltas for a streamed chat response."""
+    ) -> AsyncIterator[ReplyEvent]:
+        """Yield the reply as events: an optional leading reaction, then text deltas.
+
+        The model is asked to open with a `[react:x]` tag. Text is buffered only
+        until that tag is resolved (or ruled out), so the first visible words
+        arrive with negligible extra latency and the tag itself never leaks.
+        """
         self._require_configured()
         trimmed = _trim_history(history, self._settings.max_conversation_messages)
         lc_messages = _to_langchain_messages(mood, trimmed)
         chat_model = _build_chat_model(self._settings)
 
+        buffer = ""
+        decided = False
+
+        def _resolve(text: str) -> list[ReplyEvent]:
+            reaction, rest = split_reaction(text)
+            events: list[ReplyEvent] = []
+            if reaction:
+                events.append(ReplyEvent("reaction", reaction))
+            if rest:
+                events.append(ReplyEvent("delta", rest))
+            return events
+
         try:
             async for chunk in chat_model.astream(lc_messages):
                 content = chunk.content
-                if content:
-                    yield str(content)
+                if not content:
+                    continue
+                text = str(content)
+
+                if decided:
+                    yield ReplyEvent("delta", text)
+                    continue
+
+                buffer += text
+                stripped = buffer.lstrip()
+                if not stripped:
+                    continue
+                if not stripped.startswith("[") or "]" in stripped or len(stripped) > _MAX_TAG_BUFFER:
+                    decided = True
+                    for event in _resolve(buffer):
+                        yield event
+                    buffer = ""
+
+            if not decided and buffer:
+                for event in _resolve(buffer):
+                    yield event
         except Exception as exc:  # noqa: BLE001 - translate to a clean AppError
             logger.exception("LLM streaming failed")
             raise _map_hf_error(exc) from exc
 
-    async def generate_reply(self, mood: Mood, history: list[ChatMessage]) -> str:
+    async def generate_reply(
+        self, mood: Mood, history: list[ChatMessage]
+    ) -> GeneratedReply:
         """Generate a single non-streamed reply (used by the voice/converse flow)."""
         self._require_configured()
         trimmed = _trim_history(history, self._settings.max_conversation_messages)
@@ -175,4 +261,5 @@ class LLMService:
             raise _map_hf_error(exc) from exc
 
         content = result.content
-        return str(content) if content else ""
+        reaction, text = split_reaction(str(content) if content else "")
+        return GeneratedReply(text=text.strip(), reaction=reaction)

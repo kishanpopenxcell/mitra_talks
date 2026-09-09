@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MitraFace } from '../Mitra';
+import { MitraGlobe } from '../Mitra';
 import { getMoodMeta } from '../../mood/moods';
 import { getVoiceModeGreeting } from '../../mood/greetings';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
@@ -170,9 +170,11 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
   })();
 
   const isSpeaking = phase === 'speaking' || phase === 'greeting';
-  // Real level from Mitra's audio when we have it; the browser speech fallback
-  // exposes none, so leave it undefined and let the face synthesise a rhythm.
-  const faceAmplitude = isSpeaking && !usedFallback ? outputAmplitude : undefined;
+  // Listening: the mic level ripples the surface. Speaking: Mitra's own output
+  // level pulses it; the browser speech fallback exposes none, so leave it
+  // undefined and let the globe synthesise a rhythm.
+  const globeAmplitude =
+    phase === 'listening' ? micAmplitude : isSpeaking && !usedFallback ? outputAmplitude : undefined;
   const waveAmplitude = phase === 'listening' ? micAmplitude : isSpeaking ? outputAmplitude : 0;
 
   const [statusLabel, hint] = ((): [string, string] => {
@@ -236,13 +238,12 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
           aria-label={tapLabel}
           className="rounded-full transition-transform duration-200 hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
-          <MitraFace
+          <MitraGlobe
             mood={mood}
             state={faceState}
-            amplitude={faceAmplitude}
+            amplitude={globeAmplitude}
             reaction={reaction}
-            size={isDesktop ? 340 : 250}
-            gazeFollow={phase !== 'listening'}
+            size={isDesktop ? 380 : 260}
             label={`Mitra, ${faceState}`}
           />
         </button>
@@ -258,7 +259,7 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
               {statusLabel}
             </p>
           )}
-          {hint && <p className="text-sm text-muted">{hint}</p>}
+          {hint && <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{hint}</p>}
         </div>
       </div>
 

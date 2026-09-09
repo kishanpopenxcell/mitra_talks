@@ -1,4 +1,4 @@
-import { MitraFace } from '../Mitra';
+import { MitraGlobe } from '../Mitra';
 import type { UIMessage } from '../../types';
 import type { MoodMeta } from '../../mood/moods';
 
@@ -17,7 +17,7 @@ export function MessageBubble({ message, mood, withFace = false }: MessageBubble
       {!isUser && (
         <span className="w-[30px] shrink-0" aria-hidden={!withFace}>
           {withFace && (
-            <MitraFace mood={mood.id} state={message.streaming ? 'speaking' : 'idle'} size={30} label="" />
+            <MitraGlobe mood={mood.id} state={message.streaming ? 'speaking' : 'idle'} size={30} label="" />
           )}
         </span>
       )}

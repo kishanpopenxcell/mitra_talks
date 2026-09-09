@@ -61,7 +61,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 REACTIONS: frozenset[str] = frozenset(
-    {"surprised", "confused", "wink", "delighted", "sheepish"}
+    {"surprised", "confused", "delighted", "sheepish"}
 )
 
 _REACTION_TAG_RE = re.compile(r"^\s*\[\s*react\s*:\s*([a-zA-Z_]+)\s*\]\s*", re.IGNORECASE)

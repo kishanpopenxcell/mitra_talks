@@ -59,7 +59,6 @@ then a space, then your reply. Choose from:
 [react:none] - default; a natural, attentive expression
 [react:surprised] - genuinely unexpected news or a twist
 [react:confused] - you need clarification or the message is puzzling
-[react:wink] - a joke landed or you are being playfully conspiratorial
 [react:delighted] - good news, gratitude, or something that made you happy for them
 [react:sheepish] - you made a mistake, or they paid you a compliment
 Use [react:none] most of the time and the others only when they clearly fit. \

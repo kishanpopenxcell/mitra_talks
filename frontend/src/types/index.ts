@@ -39,9 +39,9 @@ export type MitraState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error
  * A short one-shot facial reaction, chosen by the model for each reply and
  * layered over the current mood + state for about a second and a half.
  */
-export type Reaction = 'surprised' | 'confused' | 'wink' | 'delighted' | 'sheepish';
+export type Reaction = 'surprised' | 'confused' | 'delighted' | 'sheepish';
 
-export const REACTIONS: readonly Reaction[] = ['surprised', 'confused', 'wink', 'delighted', 'sheepish'];
+export const REACTIONS: readonly Reaction[] = ['surprised', 'confused', 'delighted', 'sheepish'];
 
 export function isReaction(value: unknown): value is Reaction {
   return typeof value === 'string' && (REACTIONS as readonly string[]).includes(value);

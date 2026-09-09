@@ -1,4 +1,3 @@
-import { MitraFace } from '../Mitra';
 import type { MoodMeta } from '../../mood/moods';
 import type { MoodId } from '../../types';
 
@@ -12,8 +11,9 @@ interface MoodCardProps {
   onHover: (id: MoodId | null) => void;
 }
 
-/** One mood in the picker: a small Mitra wearing that mood's expression, plus its name. */
+/** One mood in the picker: a chip with the mood's colour. The single large globe previews it. */
 export function MoodCard({ mood, selected, active, onSelect, onHover }: MoodCardProps) {
+  const c = mood.colors.primary;
   return (
     <button
       type="button"
@@ -25,25 +25,23 @@ export function MoodCard({ mood, selected, active, onSelect, onHover }: MoodCard
       onFocus={() => onHover(mood.id)}
       onBlur={() => onHover(null)}
       className={[
-        'group flex min-w-0 flex-col items-center gap-2.5 rounded-2xl p-1 transition-all duration-300 ease-out',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-        active ? 'opacity-100' : 'opacity-70 saturate-[0.85] hover:opacity-100 hover:saturate-100',
+        'inline-flex h-10 items-center gap-2.5 rounded-full border px-4 text-[13px] font-medium tracking-[0.005em]',
+        'transition-[border-color,background-color,color,transform] duration-200 ease-out active:scale-[0.97]',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-fg/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+        selected
+          ? 'bg-white/[0.08] text-fg'
+          : active
+            ? 'border-white/20 bg-white/[0.05] text-fg'
+            : 'border-white/[0.09] text-fg/80 hover:border-white/20 hover:bg-white/[0.04] hover:text-fg',
       ].join(' ')}
+      style={selected ? { borderColor: `color-mix(in srgb, ${c} 55%, transparent)` } : undefined}
     >
       <span
-        className={[
-          'block transition-transform duration-300 ease-out',
-          selected ? 'scale-115' : active ? 'scale-108' : 'group-hover:scale-105',
-        ].join(' ')}
-      >
-        <MitraFace mood={mood.id} size={64} label="" />
-      </span>
-      <span
-        className="text-[13px] font-medium tracking-wide transition-colors duration-300"
-        style={{ color: active ? mood.colors.primary : undefined }}
-      >
-        {mood.label}
-      </span>
+        className="h-[7px] w-[7px] rounded-full"
+        style={{ background: c, boxShadow: `0 0 10px ${c}` }}
+        aria-hidden="true"
+      />
+      {mood.label}
     </button>
   );
 }

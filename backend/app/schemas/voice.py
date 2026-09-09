@@ -62,6 +62,6 @@ class ConverseResponse(BaseModel):
         default=None,
         description=(
             "The facial reaction the companion chose for this reply "
-            "(surprised, confused, wink, delighted, sheepish), or null for none."
+            "(surprised, confused, delighted, sheepish), or null for none."
         ),
     )

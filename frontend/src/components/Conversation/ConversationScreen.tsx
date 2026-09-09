@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { MitraFace } from '../Mitra';
+import { MitraGlobe } from '../Mitra';
 import { InputBar } from '../InputBar';
 import { getMoodMeta } from '../../mood/moods';
 import type { MitraState, MoodId, ReactionEvent } from '../../types';
@@ -120,9 +120,9 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
     <div className="animate-screen-in flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-5">
         <div className="flex items-center gap-3.5">
-          <MitraFace mood={mood} state={faceState} reaction={reaction} size={44} />
+          <MitraGlobe mood={mood} state={faceState} reaction={reaction} size={44} />
           <div className="flex flex-col gap-0.5">
-            <span className="font-display text-lg font-bold leading-none tracking-[-0.01em]">Mitra</span>
+            <span className="font-display text-lg font-semibold leading-none tracking-[-0.01em]">Mitra</span>
             <MoodIndicator mood={moodMeta} onChangeMood={onChangeMood} />
           </div>
         </div>

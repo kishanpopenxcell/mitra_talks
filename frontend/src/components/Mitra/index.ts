@@ -1,2 +1,2 @@
-export { MitraFace } from './MitraFace';
-export type { MitraFaceProps } from './MitraFace';
+export { MitraGlobe } from './MitraGlobe';
+export type { MitraGlobeProps } from './MitraGlobe';

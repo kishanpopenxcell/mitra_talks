@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MitraFace } from '../Mitra';
+import { MitraGlobe } from '../Mitra';
 import { MOODS, getMoodMeta } from '../../mood/moods';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type { MoodId } from '../../types';
@@ -22,6 +22,8 @@ export function MoodSelectionScreen({
 }: MoodSelectionScreenProps) {
   const [selected, setSelected] = useState<MoodId | null>(initialMood);
   const [hovered, setHovered] = useState<MoodId | null>(null);
+  /** Bumped on every selection; the globe spins once per bump. */
+  const [spinKey, setSpinKey] = useState(0);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const shown: MoodId | null = hovered ?? selected;
@@ -32,13 +34,18 @@ export function MoodSelectionScreen({
     onPreview(active);
   }, [active, onPreview]);
 
+  const handleSelect = (id: MoodId) => {
+    setSelected(id);
+    setSpinKey((k) => k + 1);
+  };
+
   return (
     <div className="animate-screen-in relative flex min-h-dvh flex-col px-5 pb-8 pt-7 sm:px-10 lg:px-[72px] lg:pb-12 lg:pt-10">
       <header className="flex items-center justify-between gap-4">
-        <span className="font-display text-[22px] font-extrabold tracking-[-0.02em]">mitra</span>
+        <span className="font-display text-[20px] font-semibold tracking-[-0.02em]">mitra</span>
         {backendUnreachable && (
-          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-200/90">
-            Companion service is unreachable — you can still explore.
+          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 font-mono text-[11px] tracking-[0.04em] text-amber-200/90">
+            Companion service unreachable — you can still explore
           </span>
         )}
       </header>
@@ -46,7 +53,7 @@ export function MoodSelectionScreen({
       <main className="flex flex-1 flex-col items-center justify-center gap-8 py-8 lg:flex-row lg:items-center lg:justify-between lg:gap-16 lg:py-6">
         <div className="order-2 flex max-w-2xl flex-col items-center gap-4 text-center lg:order-1 lg:items-start lg:text-left">
           <p className="text-lg text-muted sm:text-xl">Hi, I&apos;m Mitra.</p>
-          <h1 className="font-display text-balance text-[44px] font-extrabold leading-[0.98] tracking-[-0.035em] sm:text-6xl lg:text-[78px]">
+          <h1 className="font-display text-balance text-[42px] font-semibold leading-[1.02] tracking-[-0.035em] sm:text-6xl lg:text-[72px]">
             How are you feeling right now?
           </h1>
           <div
@@ -55,7 +62,7 @@ export function MoodSelectionScreen({
           >
             {shown ? (
               <>
-                <span className="font-display text-3xl font-bold tracking-[-0.02em] text-(--mood-p)">
+                <span className="font-display text-2xl font-semibold tracking-[-0.02em] text-(--mood-p) sm:text-3xl">
                   {activeMeta.label}
                 </span>
                 <span className="text-base text-muted sm:text-lg">{activeMeta.blurb}</span>
@@ -67,32 +74,35 @@ export function MoodSelectionScreen({
         </div>
 
         <div className="order-1 lg:order-2">
-          <MitraFace
+          <MitraGlobe
             mood={active}
             state="idle"
-            size={isDesktop ? 330 : 200}
-            gazeFollow
+            size={isDesktop ? 380 : 240}
+            spinKey={spinKey}
             label={shown ? `Mitra, ${activeMeta.label.toLowerCase()}` : 'Mitra'}
           />
         </div>
       </main>
 
-      <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div
-          role="radiogroup"
-          aria-label="How are you feeling"
-          className="grid w-full max-w-lg grid-cols-4 gap-x-2 gap-y-5 lg:flex lg:w-auto lg:max-w-none lg:items-end lg:gap-6"
-        >
-          {MOODS.map((mood) => (
-            <MoodCard
-              key={mood.id}
-              mood={mood}
-              selected={selected === mood.id}
-              active={active === mood.id && shown !== null}
-              onSelect={setSelected}
-              onHover={setHovered}
-            />
-          ))}
+      <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
+        <div className="flex flex-col items-center gap-3 lg:items-start">
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Mood</span>
+          <div
+            role="radiogroup"
+            aria-label="How are you feeling"
+            className="flex flex-wrap justify-center gap-2 lg:justify-start"
+          >
+            {MOODS.map((mood) => (
+              <MoodCard
+                key={mood.id}
+                mood={mood}
+                selected={selected === mood.id}
+                active={active === mood.id && shown !== null}
+                onSelect={handleSelect}
+                onHover={setHovered}
+              />
+            ))}
+          </div>
         </div>
 
         <button
@@ -100,11 +110,11 @@ export function MoodSelectionScreen({
           disabled={!selected}
           onClick={() => selected && onStart(selected)}
           className={[
-            'flex h-[60px] w-full max-w-xs items-center justify-center gap-3 rounded-full px-8 text-[17px] font-semibold',
-            'transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 lg:w-auto',
+            'flex h-14 w-full max-w-xs shrink-0 items-center justify-center gap-3 rounded-full px-8 text-[15px] font-semibold',
+            'transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-fg/50 lg:w-auto',
             selected
               ? 'text-ink hover:scale-[1.02] active:scale-[0.98]'
-              : 'cursor-not-allowed bg-white/10 text-white/40',
+              : 'cursor-not-allowed bg-white/[0.08] text-fg/40',
           ].join(' ')}
           style={
             selected

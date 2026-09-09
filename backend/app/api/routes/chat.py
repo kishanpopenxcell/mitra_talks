@@ -58,7 +58,7 @@ async def _sse_event_stream(
         "Event types:\n"
         "- `reaction`: `{\"reaction\": str}` -- sent at most once, before any "
         "text, naming the facial reaction the companion chose for this reply "
-        "(surprised, confused, wink, delighted, sheepish). Omitted when none.\n"
+        "(surprised, confused, delighted, sheepish). Omitted when none.\n"
         "- `message`: `{\"delta\": str}` -- an incremental text chunk.\n"
         "- `done`: `{\"done\": true}` -- sent once when the reply is complete.\n"
         "- `error`: `{\"detail\": str}` -- sent if generation fails; the "

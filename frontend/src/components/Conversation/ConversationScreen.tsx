@@ -31,6 +31,8 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
   } = useVoiceRecorder();
 
   const [voiceTurnError, setVoiceTurnError] = useState<string | null>(null);
+  /** Mitra's "could you say that again?" after an unintelligible recording -- a nudge, not an error. */
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [voiceReaction, setVoiceReaction] = useState<ReactionEvent | null>(null);
   const [voiceModeActive, setVoiceModeActive] = useState(false);
 
@@ -57,6 +59,7 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
   const handleSendText = useCallback(
     (text: string) => {
       setVoiceTurnError(null);
+      setVoiceNotice(null);
       void sendMessage(text, mood);
     },
     [sendMessage, mood],
@@ -73,6 +76,7 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
       return;
     }
     setVoiceTurnError(null);
+    setVoiceNotice(null);
     try {
       const history = messages
         .filter((m) => !m.streaming)
@@ -82,6 +86,10 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
       const result = await converseWithVoice(blob, mood, history);
       // Text mode is silent by design -- voice replies only happen in Voice Mode.
       if (result.reaction) setVoiceReaction({ kind: result.reaction, at: Date.now() });
+      if (!result.understood) {
+        setVoiceNotice(result.reply_text);
+        return;
+      }
       appendCompletedTurn(result.transcript, result.reply_text);
     } catch (err) {
       setVoiceTurnError(toFriendlyError(err, 'The voice conversation could not be completed.'));
@@ -151,6 +159,11 @@ export function ConversationScreen({ mood, onChangeMood }: ConversationScreenPro
       {combinedError && (
         <p className="animate-fade-in mx-auto w-full max-w-[760px] px-6 pb-1 text-center text-xs text-rose-300/80 sm:text-sm">
           {combinedError}
+        </p>
+      )}
+      {!combinedError && voiceNotice && (
+        <p className="animate-fade-in mx-auto w-full max-w-[760px] px-6 pb-1 text-center text-xs text-muted sm:text-sm">
+          {voiceNotice}
         </p>
       )}
       {!combinedError && !micSupported && (

@@ -6,6 +6,8 @@ import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useThinkingFiller } from '../../hooks/useThinkingFiller';
+import { clamp, useViewportSize } from '../../hooks/useViewportSize';
 import { converseWithVoice, base64AudioToObjectUrl } from '../../services/voiceService';
 import { toFriendlyError } from '../../services/apiError';
 import { Waveform } from './Waveform';
@@ -20,7 +22,10 @@ interface VoiceModeScreenProps {
   onExit: () => void;
 }
 
-type VoiceLoopPhase = 'greeting' | 'listening' | 'paused' | 'processing' | 'speaking' | 'error';
+type VoiceLoopPhase = 'greeting' | 'listening' | 'paused' | 'waiting' | 'processing' | 'speaking' | 'error';
+
+/** Recordings with less actual speech than this are treated as noise and listened past. */
+const MIN_SPEECH_MS = 350;
 
 interface Caption {
   user: string | null;
@@ -39,6 +44,12 @@ interface Caption {
 export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit }: VoiceModeScreenProps) {
   const moodMeta = getMoodMeta(mood);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const viewport = useViewportSize();
+  const globeSize = Math.round(
+    isDesktop
+      ? clamp(viewport.height * 0.46, 300, 520)
+      : clamp(Math.min(viewport.width * 0.66, viewport.height * 0.36), 200, 320),
+  );
   const [phase, setPhase] = useState<VoiceLoopPhase>('greeting');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [caption, setCaption] = useState<Caption>({ user: null, assistant: null, turn: 0 });
@@ -56,15 +67,37 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
 
   const { playAudioUrl, speakText, stop: stopPlayback, usedFallback, outputAmplitude } =
     useAudioPlayback(handlePlaybackEnded);
+  const filler = useThinkingFiller(mood);
 
   const handleSilence = useCallback(() => {
     void finishListening();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { amplitude: micAmplitude, attach: attachVAD, detach: detachVAD } = useVoiceActivityDetection({
+  const handleNoSpeech = useCallback(() => {
+    // Nobody said anything: rest quietly instead of sending silence to the server.
+    void cancelListeningTo('waiting');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const {
+    amplitude: micAmplitude,
+    attach: attachVAD,
+    detach: detachVAD,
+    getSpeechMs,
+  } = useVoiceActivityDetection({
     onSilence: handleSilence,
+    onNoSpeech: handleNoSpeech,
   });
+
+  const cancelListeningTo = useCallback(
+    async (next: 'paused' | 'waiting') => {
+      detachVAD();
+      cancelRecording();
+      if (activeRef.current) setPhase(next);
+    },
+    [detachVAD, cancelRecording],
+  );
 
   const beginListening = useCallback(async () => {
     if (!activeRef.current) return;
@@ -87,26 +120,42 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
   }, [startRecording, attachVAD]);
 
   const finishListening = useCallback(async () => {
+    const speechMs = getSpeechMs();
     detachVAD();
     const blob = await stopRecording();
     if (!activeRef.current) return;
 
-    if (!blob) {
-      // Nothing meaningful was recorded (e.g. immediate silence) -- just listen again.
+    if (!blob || speechMs < MIN_SPEECH_MS) {
+      // A click, a cough, a breath: not a turn. Listen again without a round trip.
       void beginListening();
       return;
     }
 
     setPhase('processing');
+    filler.arm();
     try {
       const result = await converseWithVoice(blob, mood, historyRef.current);
+      // If a "hmm, let me think" is mid-sentence, let it finish before the reply.
+      await filler.settle();
       if (!activeRef.current) return;
+
+      if (!result.understood) {
+        // Couldn't make it out as English. Mitra asks again; nothing joins the history.
+        filler.noteOutcome('unclear');
+        setCaption((prev) => ({ user: null, assistant: result.reply_text, turn: prev.turn + 1 }));
+        if (result.reaction) setReaction({ kind: result.reaction, at: Date.now() });
+        setPhase('speaking');
+        if (result.audio_base64) playAudioUrl(base64AudioToObjectUrl(result.audio_base64));
+        else void speakText(result.reply_text);
+        return;
+      }
 
       const newTurns: ChatMessage[] = [
         { role: 'user', content: result.transcript },
         { role: 'assistant', content: result.reply_text },
       ];
       historyRef.current = [...historyRef.current, ...newTurns].slice(-20);
+      filler.noteOutcome('ok');
 
       setCaption((prev) => ({ user: result.transcript, assistant: result.reply_text, turn: prev.turn + 1 }));
       if (result.reaction) setReaction({ kind: result.reaction, at: Date.now() });
@@ -119,11 +168,13 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
         void speakText(result.reply_text);
       }
     } catch (err) {
+      filler.cancel();
+      filler.noteOutcome('error');
       if (!activeRef.current) return;
       setPhase('error');
       setErrorMessage(toFriendlyError(err, 'The voice conversation could not be completed.'));
     }
-  }, [mood, stopRecording, detachVAD, beginListening, onTurnCompleted, playAudioUrl, speakText]);
+  }, [mood, stopRecording, detachVAD, getSpeechMs, beginListening, onTurnCompleted, playAudioUrl, speakText, filler]);
 
   // Speak the mood greeting on mount, then start listening once it finishes.
   useEffect(() => {
@@ -143,6 +194,7 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       detachVAD();
       cancelRecording();
       stopPlayback();
+      filler.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -153,13 +205,14 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       stopPlayback();
       void beginListening();
     } else if (phase === 'listening') {
-      detachVAD();
-      cancelRecording();
-      setPhase('paused');
-    } else if (phase === 'paused' || phase === 'error') {
+      void cancelListeningTo('paused');
+    } else if (phase === 'processing') {
+      // Hush a filler mid-sentence; the reply is still on its way.
+      filler.cancel();
+    } else if (phase === 'paused' || phase === 'waiting' || phase === 'error') {
       void beginListening();
     }
-  }, [phase, stopPlayback, beginListening, detachVAD, cancelRecording]);
+  }, [phase, stopPlayback, beginListening, cancelListeningTo, filler]);
 
   const faceState: MitraState = (() => {
     if (phase === 'error') return 'error';
@@ -185,6 +238,8 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
         return ["I'm listening — take your time.", 'Tap Mitra to pause'];
       case 'paused':
         return ['Paused.', 'Tap Mitra to resume'];
+      case 'waiting':
+        return ["I'm here whenever you're ready.", 'Tap Mitra to continue'];
       case 'processing':
         return ['Thinking…', ''];
       case 'speaking':
@@ -232,21 +287,16 @@ export function VoiceModeScreen({ mood, initialHistory, onTurnCompleted, onExit 
       </header>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-7 px-4">
-        <button
-          type="button"
-          onClick={handleTap}
-          aria-label={tapLabel}
-          className="rounded-full transition-transform duration-200 hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-        >
-          <MitraGlobe
-            mood={mood}
-            state={faceState}
-            amplitude={globeAmplitude}
-            reaction={reaction}
-            size={isDesktop ? 380 : 260}
-            label={`Mitra, ${faceState}`}
-          />
-        </button>
+        <MitraGlobe
+          mood={mood}
+          state={faceState}
+          amplitude={globeAmplitude}
+          reaction={reaction}
+          size={globeSize}
+          interactive
+          onTap={handleTap}
+          label={`Mitra, ${faceState}. ${tapLabel}`}
+        />
 
         <Waveform amplitude={waveAmplitude} />
 

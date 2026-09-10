@@ -45,8 +45,26 @@ class ConverseResponse(BaseModel):
     combining the transcript, reply text, and audio together.
     """
 
-    transcript: str = Field(description="Transcribed text from the user's audio.")
-    reply_text: str = Field(description="The AI companion's text reply.")
+    transcript: str = Field(
+        description=(
+            "Transcribed text from the user's audio. Empty when `understood` is "
+            "false -- the speech could not be made out as English."
+        )
+    )
+    reply_text: str = Field(
+        description=(
+            "The AI companion's text reply, or, when `understood` is false, a "
+            "polite request to say it again."
+        )
+    )
+    understood: bool = Field(
+        default=True,
+        description=(
+            "False when the recording was silent, unintelligible, or not English. "
+            "The turn was not sent to the model and should not be added to the "
+            "conversation history; `reply_text`/audio carry the repeat request."
+        ),
+    )
     audio_base64: str | None = Field(
         default=None,
         description=(

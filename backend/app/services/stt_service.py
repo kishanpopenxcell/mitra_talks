@@ -25,6 +25,8 @@ the MVP to work.
 
 from __future__ import annotations
 
+import base64
+
 import httpx
 
 from app.core.config import Settings
@@ -40,20 +42,19 @@ logger = get_logger(__name__)
 
 HF_ROUTER_ASR_URL = "https://router.huggingface.co/{provider}/models/{model}"
 
-# The router matches on a bare MIME type; `audio/webm;codecs=opus` (what
-# MediaRecorder reports) is rejected, so the codec parameter is stripped.
-DEFAULT_AUDIO_CONTENT_TYPE = "audio/webm"
+# The product is English-only. Whisper auto-detects language from the first
+# few seconds of audio and, on unclear or accented speech, sometimes decodes
+# English as another language entirely. Pinning the decoder language stops
+# that at the source; anything still unintelligible is caught afterwards by
+# `app.utils.transcript.assess_transcript`.
+STT_LANGUAGE = "en"
+
+# Sending parameters requires the JSON body shape (base64 audio). Raw bytes are
+# faster to ship but cannot carry options.
+HF_ASR_PARAMETERS = {"generate_kwargs": {"language": STT_LANGUAGE, "task": "transcribe"}}
 
 GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_STT_MODEL = "whisper-large-v3"
-
-
-def _normalize_content_type(content_type: str | None) -> str:
-    """Reduce a browser upload's content type to the bare MIME type."""
-    if not content_type:
-        return DEFAULT_AUDIO_CONTENT_TYPE
-    bare = content_type.split(";")[0].strip().lower()
-    return bare or DEFAULT_AUDIO_CONTENT_TYPE
 
 
 class STTService:
@@ -91,15 +92,20 @@ class STTService:
             provider=self._settings.hf_stt_provider,
             model=self._settings.hf_stt_model,
         )
+        del content_type  # the JSON body carries the audio; the router sniffs its format
         headers = {
             "Authorization": f"Bearer {self._settings.hf_token}",
-            "Content-Type": _normalize_content_type(content_type),
+            "Content-Type": "application/json",
+        }
+        body = {
+            "inputs": base64.b64encode(audio_bytes).decode("ascii"),
+            "parameters": HF_ASR_PARAMETERS,
         }
 
         async with httpx.AsyncClient(
             timeout=self._settings.request_timeout_seconds
         ) as client:
-            response = await client.post(url, content=audio_bytes, headers=headers)
+            response = await client.post(url, json=body, headers=headers)
         response.raise_for_status()
 
         payload = response.json()
@@ -118,7 +124,7 @@ class STTService:
         files = {
             "file": ("audio.webm", audio_bytes, content_type or "application/octet-stream"),
         }
-        data = {"model": GROQ_STT_MODEL}
+        data = {"model": GROQ_STT_MODEL, "language": STT_LANGUAGE}
 
         try:
             async with httpx.AsyncClient(

@@ -14,6 +14,7 @@ from app.schemas.chat import ChatMessage
 from app.schemas.voice import ConverseResponse, SpeakRequest, TranscribeResponse
 from app.utils.audio import audio_bytes_to_base64, looks_like_valid_audio
 from app.utils.errors import InvalidAudioError, InvalidRequestError, TTSError
+from app.utils.transcript import is_intelligible, repeat_request
 
 logger = get_logger(__name__)
 
@@ -117,27 +118,27 @@ async def converse(
         ) from exc
 
     audio_bytes = await _read_and_validate_audio(audio)
-    transcript = await stt_service.transcribe(audio_bytes, audio.content_type)
+    transcript = (await stt_service.transcribe(audio_bytes, audio.content_type)).strip()
 
-    if not transcript.strip():
-        raise InvalidAudioError(
-            "No speech could be detected in the recording. Please try again."
+    if not is_intelligible(transcript):
+        # Silence, noise, a Whisper hallucination, or the wrong language: don't
+        # guess and don't involve the model -- ask the user to say it again.
+        logger.info("Unintelligible transcript discarded (%d chars)", len(transcript))
+        ask = repeat_request()
+        ask_audio, ask_tts = await _synthesize_optional(tts_service, ask)
+        return ConverseResponse(
+            transcript="",
+            reply_text=ask,
+            audio_base64=ask_audio,
+            tts_available=ask_tts,
+            reaction="confused",
+            understood=False,
         )
 
     full_history = [*history_messages, ChatMessage(role="user", content=transcript)]
     reply = await llm_service.generate_reply(mood_value, full_history)
 
-    audio_base64: str | None = None
-    tts_available = True
-    if reply.text:
-        try:
-            reply_audio = await tts_service.synthesize(reply.text)
-            audio_base64 = audio_bytes_to_base64(reply_audio)
-        except TTSError as exc:
-            logger.warning("TTS failed during /converse, continuing without audio: %s", exc.detail)
-            tts_available = False
-    else:
-        tts_available = False
+    audio_base64, tts_available = await _synthesize_optional(tts_service, reply.text)
 
     return ConverseResponse(
         transcript=transcript,
@@ -145,4 +146,16 @@ async def converse(
         audio_base64=audio_base64,
         tts_available=tts_available,
         reaction=reply.reaction,
+        understood=True,
     )
+
+
+async def _synthesize_optional(tts_service: TTSServiceDep, text: str) -> tuple[str | None, bool]:
+    """TTS that degrades to (None, False) instead of failing the turn."""
+    if not text:
+        return None, False
+    try:
+        return audio_bytes_to_base64(await tts_service.synthesize(text)), True
+    except TTSError as exc:
+        logger.warning("TTS failed during /converse, continuing without audio: %s", exc.detail)
+        return None, False

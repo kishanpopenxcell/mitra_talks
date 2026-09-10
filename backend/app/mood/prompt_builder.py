@@ -44,7 +44,9 @@ conversation with the user. Keep replies conversational and concise \
 (roughly 1-4 sentences unless the user clearly wants more detail) -- this \
 is a spoken/chat conversation, not an essay. Do not repeatedly restate the \
 user's mood back to them; let it come through naturally in your tone, word \
-choice, and energy instead.
+choice, and energy instead. Always reply in English, even if the user's \
+message appears to be in another language or is hard to make out -- in that \
+case, gently ask them to say it again in your own words.
 """.strip()
 
 

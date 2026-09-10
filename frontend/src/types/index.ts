@@ -83,6 +83,12 @@ export interface ConverseResponse {
   audio_base64: string | null;
   tts_available: boolean;
   reaction: Reaction | null;
+  /**
+   * False when the recording was silent, unintelligible or not English. The
+   * turn never reached the model; `reply_text`/audio carry a polite request
+   * to say it again and nothing should be added to the history.
+   */
+  understood: boolean;
 }
 
 /** Recording lifecycle state for the microphone input. */

@@ -103,7 +103,16 @@ const STATE_FNS: Record<MitraState, StateFn> = {
 
 type ReactionFn = (p: GlobeParams, e: number) => void;
 
-const REACTION_FNS: Record<Reaction, ReactionFn> = {
+/** Reactions the globe can play: the model-chosen set plus a local "poke" when the user taps it. */
+export type GlobeReaction = Reaction | 'poke';
+
+const REACTION_FNS: Record<GlobeReaction, ReactionFn> = {
+  poke: (p, e) => {
+    p.radius *= 1 + 0.16 * e;
+    p.bright *= 1 + 0.45 * e;
+    p.sparkle += 0.8 * e;
+    p.turb *= 1 + 0.5 * e;
+  },
   surprised: (p, e) => {
     p.radius *= 1 + 0.32 * e;
     p.bright *= 1 + 0.6 * e;
@@ -134,7 +143,7 @@ export function resolveParams(
   mood: MoodId,
   state: MitraState,
   amp: number,
-  reaction: { kind: Reaction; progress: number } | null,
+  reaction: { kind: GlobeReaction; progress: number } | null,
   reduceMotion: boolean,
 ): GlobeParams {
   const p: GlobeParams = { ...DEFAULTS, ...MOOD_PARAMS[mood] };

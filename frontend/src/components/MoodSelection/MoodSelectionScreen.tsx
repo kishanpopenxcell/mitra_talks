@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MitraGlobe } from '../Mitra';
 import { MOODS, getMoodMeta } from '../../mood/moods';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { clamp, useViewportSize } from '../../hooks/useViewportSize';
 import type { MoodId } from '../../types';
 import { MoodCard } from './MoodCard';
 
@@ -25,6 +26,13 @@ export function MoodSelectionScreen({
   /** Bumped on every selection; the globe spins once per bump. */
   const [spinKey, setSpinKey] = useState(0);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const viewport = useViewportSize();
+
+  // Size the globe to the space it has: on desktop it owns the right column,
+  // on smaller screens it sits above the headline.
+  const globeSize = isDesktop
+    ? Math.round(clamp(Math.min(viewport.width * 0.34, viewport.height * 0.62), 300, 620))
+    : Math.round(clamp(Math.min(viewport.width * 0.6, viewport.height * 0.32), 180, 300));
 
   const shown: MoodId | null = hovered ?? selected;
   const active: MoodId = shown ?? 'neutral';
@@ -50,7 +58,7 @@ export function MoodSelectionScreen({
         )}
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-8 py-8 lg:flex-row lg:items-center lg:justify-between lg:gap-16 lg:py-6">
+      <main className="flex flex-1 flex-col items-center justify-center gap-8 py-8 lg:grid lg:grid-cols-2 lg:items-center lg:gap-10 lg:py-6">
         <div className="order-2 flex max-w-2xl flex-col items-center gap-4 text-center lg:order-1 lg:items-start lg:text-left">
           <p className="text-lg text-muted sm:text-xl">Hi, I&apos;m Mitra.</p>
           <h1 className="font-display text-balance text-[42px] font-semibold leading-[1.02] tracking-[-0.035em] sm:text-6xl lg:text-[72px]">
@@ -73,12 +81,13 @@ export function MoodSelectionScreen({
           </div>
         </div>
 
-        <div className="order-1 lg:order-2">
+        <div className="order-1 flex justify-center lg:order-2">
           <MitraGlobe
             mood={active}
             state="idle"
-            size={isDesktop ? 380 : 240}
+            size={globeSize}
             spinKey={spinKey}
+            interactive
             label={shown ? `Mitra, ${activeMeta.label.toLowerCase()}` : 'Mitra'}
           />
         </div>
